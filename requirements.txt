@@ -1,0 +1,16 @@
+# apscheduler not wokring?
+croniter
+toml
+psutil
+colorama
+termcolor
+#blessings
+#tornado
+dateparser
+tabulate # todo check if still using
+prompt-toolkit
+# rich flickers for live 
+watchfiles
+pyinstaller
+requests
+lmdb
