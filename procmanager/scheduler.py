@@ -1,0 +1,71 @@
+import threading
+
+from procmanager.job import Job
+from procmanager.config import load_job_defs
+from procmanager.dynamic_user_config import add_to_dynamic_config, remove_from_dynamic_config
+from procmanager import db
+import logging
+log = logging.Logger('PythonProcessRunner')
+
+
+class Scheduler:
+    def __init__(self):
+        self.job_defs = {}
+        self.jobs = {}
+        self.lock = threading.Lock()
+        self.reload()
+   
+    """ TODO DELETE
+    def make_job(self, jobname, schedule, command, givewayto):
+        self.job_defs[jobname] = {'jobname': jobname,
+                                  'schedule': schedule,
+                                  'command': command,
+                                  'givewayto': givewayto}
+                                  #TODO what about new props such as next
+        if jobname in self.jobs:
+            existing_job =  self.jobs[jobname]
+            existing_job.pause()
+            del self.jobs
+
+        job = Job(jobname, schedule, command, givewayto)
+        self.jobs[jobname] = job
+    
+    def add_new_job(self, jobname, schedule, command, givewayto):
+        add_to_dynamic_config(jobname, schedule, command, givewayto)
+        self.make_job(jobname, schedule, command, givewayto)
+
+    def delete_job_forever(self, jobname):
+        # This won't delete from user defined files!
+        job = self.jobs.get(jobname)
+        if job:
+            job.pause()
+            del job
+        remove_from_dynamic_config(jobname)
+        log.info(f'{jobname} removed, but won''t be removed from user config files')
+    """
+
+
+    def _reload(self):
+        # Load job defs first before deleting existing jobs
+        self.job_defs, job_def_errors = load_job_defs()
+        if job_def_errors:
+            print("Error loading job defs, stopping reload")
+            db.set_job_def_status(job_def_errors)
+            return
+
+        # reloads the jobs list and regenerates jobs
+        for jobname, job in self.jobs.items():
+            job.pause()
+            del job
+        self.jobs = {}
+
+        for jobname, job_def in self.job_defs.items():
+            log.error(f'scheduling {jobname}')
+            if not job_def.get('schedule'):
+                job_def['schedule'] = ''
+            job =  Job(jobname=jobname, **job_def)
+            self.jobs[jobname] = job
+
+    def reload(self): # with Lock
+        with self.lock: 
+            return self._reload()

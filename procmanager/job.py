@@ -1,0 +1,96 @@
+import time
+from threading import Timer
+from croniter import croniter
+from datetime import datetime, timezone
+import pytz
+import tzlocal
+import dateparser
+from procmanager.job_instance import run_job
+from procmanager import db
+import logging
+
+logging.basicConfig(format='%(asctime)s %(message)s')
+log = logging.Logger('PythonProcessRunner')
+#logging.basicConfig(format="%(asctime)s - %(levelname)s : %(message)s",
+#    datefmt="%m/%d/%y %I:%M:%S %p",)
+
+class Job:
+    def __init__(self, jobname, schedule, command, givewayto=None, comments=None, timeout=None, tz=None, **args):
+        self.schedule = schedule
+        if not croniter.is_valid(schedule, second_at_beginning=True):
+            log.error('Couldn''t parse cron schedule! "' + schedule + '" for ' + jobname + '. Not scheduling.')
+            self.schedule = None
+
+        self.jobname = jobname
+        self.command = command
+        self.givewayto = givewayto
+        self.comments = comments
+        self.timeout = timeout # see job_instance.py:get_timeout_dt for conversion, can validate it here with that function
+        if tz is None or tz.lower().strip() == 'local':
+            #self.tz = pytz.timezone(datetime.now().astimezone().tzname())
+            self.tz = tzlocal.get_localzone()
+        else:
+            self.tz = pytz.timezone(tz)  # works for > than half of tzs tried....
+
+        log.debug(f"Unused arguments {args} for {jobname}")
+        self.running_jobs = []
+        self.timer = None
+        self.play()
+        'THIS MAY BLOCK HERE'
+
+    def get_next_time(self):
+        if not self.schedule:
+            return
+        #base = datetime(2000, 1, 1, 0, 0)
+        #iter = croniter(self.schedule, datetime.now(tz=timezone.utc))
+        iter = croniter(self.schedule, datetime.now(tz=self.tz), second_at_beginning=True)
+        # iter.get_current()
+        return iter.get_next(datetime) 
+    
+    def _schedule_next(self):
+        next_time = self.get_next_time()
+        print(next_time)
+        if not next_time:
+            return
+
+        # If wait time total seconds is significantly (even 0.25 secs, or potentially more) early will get a double schedule.
+        # - because total seconds does not have fractional component, unlike seconds did.
+        # but remember changing this use total seconds. total seconds is all of the timedelta, not just the seconds up to a day.
+        # timedelta.microseconds is the fractional seconds attribute. 
+        # either, add a second to the total_seconds
+        # add the timedelta.microseconds value divided by a million then add 0.001 (1ms) to total_seconds
+        # wait_time = (next_time - datetime.now(tz=self.tz)).total_seconds()
+        wait_time_time_delta = (next_time - datetime.now(tz=self.tz))
+        wait_time_time_delta_fraction_seconds = (wait_time_time_delta.microseconds / 1_000_000 ) + 0.002
+        wait_time = wait_time_time_delta.total_seconds() + wait_time_time_delta_fraction_seconds
+
+        self.timer = Timer(wait_time, self.run_instance, args=None, kwargs=None)
+        self.timer.daemon = True
+        self.timer.start()
+
+    def pause(self):
+        self.timer.cancel() if self.timer else None
+
+    def play(self):
+        self._schedule_next()
+ 
+    def _can_run(self):
+        for priority_job_name in self.givewayto or []:
+            if db.is_job_running(priority_job_name):
+                return False 
+        return True
+
+    def run_instance(self):
+        try:
+            run_job(self.jobname)
+        finally:
+            time.sleep(1)  # croniter resolution seems to be one second
+            #t = Thread(target=self._schedule_next, daemon=True)
+            #t.start()
+            self._schedule_next()
+
+
+# necessary?
+def create_job(jobname, schedule, command, givewayto):
+    j = Job(jobname, schedule, command, givewayto)
+    return j
