@@ -1,4 +1,21 @@
+from datetime import datetime
 import lmdb
+
+''' 
+For string storage, you may as well used a plain Store. For typed values, TypedStore is available.
+
+'''
+'''
+TODOS:
+    integrate put_value exception catching with the @lmdb_retryer decorator
+    decide whether to use inheritance or not - not probably - X
+    once have used it a bit decide resizing quantity strategy
+
+
+    - sqlite backend
+    - duckdb backend
+    - sql interface for lmdb kv?
+'''
 
 # TODO set map_size larger
 TEST_MAP_SIZE = 1024
@@ -12,6 +29,7 @@ large_value = "asdfselfjlkjlkjalkesjflskejlkfjl"
 if __name__ == '__main__':
     #env = lmdb.open('/tmp/mydb', map_size=256)
     env = lmdb.open('/tmp/mydb', map_size=len(large_value))
+    #pass
 
 # os page size multiple default
 # 10485760 
@@ -28,33 +46,72 @@ if __name__ == '__main__':
 # is it key/value or is it object "storage"? 
 #     - start with key value, with types?
 
-def put_value():
+
+def put_value(key, value):
     try:
         with env.begin(write=True) as txn:
-            txn.put(b'key', large_value)
-            print(len(large_value))
+            txn.put(key.encode(), value.encode()) # b'key'
+            print(len(value))
     except lmdb.MapFullError:
         # Double the map size and retry.
-        env.set_mapsize(env.info()['map_size'] * 10)
-        print('mapsize')
+        increase_map_size()
+        print('mapsize resized')
         print(env.info()['map_size'])
-        with env.begin(write=True) as txn:
-            print(len(large_value))
-            try:
-                txn.put(b'key', large_value)
-            except lmdb.MapFullError:
-                # try again
-                put_value() # TODO
-            except lmdb.MapResizedError:
-                # Call map resize
-                env.set_mapsize(0)
-            except lmdb.Error:
-                print('Couldnt allocate as not enough disk space on this partition')
-                # TODO try a smaller map size if there is still disk space.
+        put_value(key, value)
+    except lmdb.MapResizedError:
+        # Call map resize to refresh the stored mapsize
+        env.set_mapsize(0)
+        put_value(key, value)
 
-#for i in range(400):
-    #large_value = large_value * 2
-    #TODO get this working put_value()
+
+import threading
+import time
+#env1 = lmdb.open('/tmp/mydb', map_size=len(large_value))
+def open_transaction():
+    # env1 = lmdb.open('/tmp/mydb', map_size=len(large_value))
+    with env.begin(write=True) as txn:
+        txn.put(b'k1', b'asdfsd')
+        time.sleep(5)
+
+def spawn_open_transaction():
+    t=threading.Thread(target=open_transaction)
+    t.start()
+
+def increase_map_size():
+    try:
+        env.set_mapsize(env.info()['map_size'] * 30)
+    except lmdb.Error as e:
+        if 'Cannot set_mapsize while a write transaction is active' in str(e):
+            print('error resizing db, a write transaction was open')
+            time.sleep(1)
+            return increase_map_size()
+        #'mdb_txn_commit: Input/output error'
+        if 'Input/output error' in str(e):
+            print('Couldnt allocate as not enough disk space on this partition')
+            # TODO try a smaller map size if there is still disk space.
+            quit()
+    # Preemptively reset stored mapsize. One env per process.
+    env.set_mapsize(0)
+    return True
+
+
+def test_map_size_errors():
+    # Test map size errors etc.
+    increase_map_size()            
+    t2=threading.Thread(target=open_transaction)
+    #t2.start()
+    #open_transaction()
+
+    #quit()
+
+    for i in range(400):
+        large_value = large_value * 2
+        #TODO get this working put_value()
+        put_value('k', large_value)
+        if i == 10:
+            t2.start()
+
+    quit()
 
 
 def lmdb_retryer(f):
@@ -74,9 +131,9 @@ types_to_code_map = {
 
 code_to_types_map = {v: k for k, v in types_to_code_map.items()}
 
-def match_subclass(v):
-    for k, v in types_to_code_map.items():
-        if issubclass(v, k):
+def match_subclass(value):
+    for k, code in types_to_code_map.items():
+        if issubclass(type(value), k):
             return types_to_code_map[k]
     return 's'
 
@@ -88,8 +145,140 @@ def convert_v_to_typed(ba):
     print(t_code)
     print(t_code, v)
     type_ = code_to_types_map[t_code]
-    v = type_(v)
+    print('cvtt')
+    print(type_, v)
+    if issubclass(type_, str):
+        v = v.decode()
+    else:
+        v = type_(v)
     return v
+
+def convert_k_to_id_and_name(k):
+    print( k.split(':', 1) )
+    parts = k.split(':', 1)
+    print(len(parts), parts[0], parts[1])
+    _id, name = (parts[0], parts[1]) if len(parts) > 1 else (parts[0], None)
+    return _id, name
+
+class CodedDocumentStore:
+    pass
+
+class DocumentStore:
+    def __init__(self, path='record_store.db', db_name=None):
+        self.path = path
+        self.db_name = db_name.encode() if isinstance(db_name, str) else db_name
+        self.db = self._get_db(self.path, self.db_name)
+        # TODO one write at a time. classmethod/var lock
+        
+    def _get_db(self, path, db):
+        self.env = lmdb.open(path, max_dbs=999, readonly=False)
+        # Interface is:
+        # db = env.open_db(None)  # For main database
+        # db = env.open_db(b'record_store') # for sub database
+        return self.env.open_db(self.db_name)
+
+    def remove(self, document):
+        # delete document given transaction
+
+        #TODO IMPLEMENT
+        raise NotImplementedError
+
+    def update(self, update_document):
+        #TODO IMPLEMENT
+        raise NotImplementedError
+
+
+    def save(self, document, generated_id=False):
+        # 1) find and remove existing document by _id
+        # as part of transaction
+
+        # 2) insert document
+        if '_id' in document and generated_id is False:
+            _id = document['_id']
+        else:
+            _id = datetime.timestamp(datetime.now())
+            generated_id = True  # regen if transaction fails.
+        try:
+            with self.env.begin(write=True, db=self.db) as txn:
+                for k, v in document.items():
+                    print(k, v)
+                    # encode key
+                    k = f'{_id}:{k}'
+                    print('key', k)
+                    # encode value
+                    t = types_to_code_map.get(type(v)) 
+                    if t is None:
+                        t = match_subclass(v)
+                    v = f'{t}{v}'
+                    res = txn.put(k.encode(), v.encode())
+            return res
+        except Exception as e:
+            print(e)
+            import time
+            time.sleep(1) # todo expo, jitter, async etc
+            return self.save(document, generated_id)  # todo test
+
+
+    def find(self, **kwargs):
+        skip_entry = False
+        entry = {}
+        for k, v in self.__iter__():
+            print(k,v)
+            _id, name = convert_k_to_id_and_name(k)
+            if name is None:
+                # is new entry
+                if skip_entry is False:
+                    yield entry
+                skip_entry = False
+                entry = {}
+
+            if name is None:  # _id
+                if '_id' in kwargs:
+                    arg_id = kwargs['_id']
+                    if arg_id != _id:
+                        skip_entry = True
+                        continue
+
+            if name in kwargs:
+                arg_value = kwargs[name]
+                if v != arg_value: 
+                    skip_entry = True
+                    continue
+
+            # otherwise keep building entry
+            print(v)
+            entry[name] = v
+
+        yield entry
+
+    def find_one(self, **filters):  # TODO move downwards
+        for entry in self.find(**filters):
+            yield entry
+            return
+
+    def __iter__(self):
+        with self.env.begin(write=False, db=self.db ) as txn:
+            with txn.cursor() as cursor:
+                for k, v in cursor:
+                    yield k.decode(), convert_v_to_typed(v)  # v.decode()
+
+            
+
+ 
+if __name__ == '__main__':
+    ds = DocumentStore()
+    from datetime import datetime
+    document = {'a': 'b23', 'b': 'c35', 'c': 'e355', 'd': 2, 'dt': datetime.now()}
+    ds.save(document)
+    print(list(ds.find()))
+    print(list(ds.find_one()))
+
+if __name__ == '__main__':
+    spawn_open_transaction()
+
+if __name__ == '__main__':
+    test_map_size_errors()
+    quit()
 
 class TypedStore:
     def __init__(self, path='record_store.db', sub_db=None):
@@ -210,3 +399,4 @@ if __name__ =='__main__':
         with env.begin(write=True, db=dbo) as txn:
             txn.drop(dbo)
             print(env.stat())
+
