@@ -1,6 +1,7 @@
 from datetime import datetime
 import lmdb
 
+
 ''' 
 For string storage, you may as well used a plain Store. For typed values, TypedStore is available.
 
@@ -160,118 +161,6 @@ def convert_k_to_id_and_name(k):
     _id, name = (parts[0], parts[1]) if len(parts) > 1 else (parts[0], None)
     return _id, name
 
-class CodedDocumentStore:
-    pass
-
-class DocumentStore:
-    def __init__(self, path='record_store.db', db_name=None):
-        self.path = path
-        self.db_name = db_name.encode() if isinstance(db_name, str) else db_name
-        self.db = self._get_db(self.path, self.db_name)
-        # TODO one write at a time. classmethod/var lock
-        
-    def _get_db(self, path, db):
-        self.env = lmdb.open(path, max_dbs=999, readonly=False)
-        # Interface is:
-        # db = env.open_db(None)  # For main database
-        # db = env.open_db(b'record_store') # for sub database
-        return self.env.open_db(self.db_name)
-
-    def remove(self, document):
-        # delete document given transaction
-
-        #TODO IMPLEMENT
-        raise NotImplementedError
-
-    def update(self, update_document):
-        #TODO IMPLEMENT
-        raise NotImplementedError
-
-
-    def save(self, document, generated_id=False):
-        # 1) find and remove existing document by _id
-        # as part of transaction
-
-        # 2) insert document
-        if '_id' in document and generated_id is False:
-            _id = document['_id']
-        else:
-            _id = datetime.timestamp(datetime.now())
-            generated_id = True  # regen if transaction fails.
-        try:
-            with self.env.begin(write=True, db=self.db) as txn:
-                for k, v in document.items():
-                    print(k, v)
-                    # encode key
-                    k = f'{_id}:{k}'
-                    print('key', k)
-                    # encode value
-                    t = types_to_code_map.get(type(v)) 
-                    if t is None:
-                        t = match_subclass(v)
-                    v = f'{t}{v}'
-                    res = txn.put(k.encode(), v.encode())
-            return res
-        except Exception as e:
-            print(e)
-            import time
-            time.sleep(1) # todo expo, jitter, async etc
-            return self.save(document, generated_id)  # todo test
-
-
-    def find(self, **kwargs):
-        skip_entry = False
-        entry = {}
-        for k, v in self.__iter__():
-            print(k,v)
-            _id, name = convert_k_to_id_and_name(k)
-            if name is None:
-                # is new entry
-                if skip_entry is False:
-                    yield entry
-                skip_entry = False
-                entry = {}
-
-            if name is None:  # _id
-                if '_id' in kwargs:
-                    arg_id = kwargs['_id']
-                    if arg_id != _id:
-                        skip_entry = True
-                        continue
-
-            if name in kwargs:
-                arg_value = kwargs[name]
-                if v != arg_value: 
-                    skip_entry = True
-                    continue
-
-            # otherwise keep building entry
-            print(v)
-            entry[name] = v
-
-        yield entry
-
-    def find_one(self, **filters):  # TODO move downwards
-        for entry in self.find(**filters):
-            yield entry
-            return
-
-    def __iter__(self):
-        with self.env.begin(write=False, db=self.db ) as txn:
-            with txn.cursor() as cursor:
-                for k, v in cursor:
-                    yield k.decode(), convert_v_to_typed(v)  # v.decode()
-
-            
-
- 
-if __name__ == '__main__':
-    ds = DocumentStore()
-    from datetime import datetime
-    document = {'a': 'b23', 'b': 'c35', 'c': 'e355', 'd': 2, 'dt': datetime.now()}
-    ds.save(document)
-    print(list(ds.find()))
-    print(list(ds.find_one()))
 
 if __name__ == '__main__':
     spawn_open_transaction()
@@ -328,9 +217,10 @@ class TypedStore:
         # return res.decode() if isinstance(res, bytes ) else res
         return
 
-s = TypedStore('./testdb')
-s.save('asdf', 'asdfsaf')
-s.get('asdf')
+if __name__ == '__main__':
+    s = TypedStore('./testdb')
+    s.save('asdf', 'asdfsaf')
+    s.get('asdf')
 
 
 class Store:
