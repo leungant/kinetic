@@ -44,7 +44,7 @@ Repository = "https://github.com/me/spam.git"
 Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
 
 [project.scripts]
-kinedev = "procmanager.main:main"
+kineticdev = "procmanager.main:main"
 # pm-cli2 = "procmanager:main"
 # pm-serve = "procmanager.main:serve"
 

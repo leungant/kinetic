@@ -3,10 +3,10 @@ import os
 
 def test_env():
     td = tempfile.TemporaryDirectory()
-    os.environ['KINE_TEST_PATH'] = td.name
+    os.environ['KINETIC_TEST_PATH'] = td.name
     print(td.name)
-    print(os.getenv('KINE_TEST_PATH'))
-    print(os.environ['KINE_TEST_PATH'])
+    print(os.getenv('KINETIC_TEST_PATH'))
+    print(os.environ['KINETIC_TEST_PATH'])
 
     from procmanager import config
     print(config.TEST_PATH)

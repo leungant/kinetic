@@ -116,8 +116,8 @@ def start(args):
 
 def stop(args):
     """ stop systemctl service or win service """
-    os.system("systemctl --user stop kine") 
-    os.system("systemctl --user status kine") 
+    os.system("systemctl --user stop kinetic") 
+    os.system("systemctl --user status kinetic") 
     """ stop crontab started service """
     stop_existing_server()
 
@@ -144,7 +144,7 @@ def version(args):
 
 def update_(args):
     """ Upgrade and copy binary to $HOME/bin - ought to be interactive"""
-    maybe_yes = input("Are you sure you wish to update the kine binary (y or n + Enter) \n")
+    maybe_yes = input("Are you sure you wish to update the kinetic binary (y or n + Enter) \n")
     if maybe_yes.lower() == 'y':
         do_update()
 

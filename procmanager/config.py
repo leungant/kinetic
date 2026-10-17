@@ -10,9 +10,9 @@ ACCOUNTS = {'example1': {'api_key': '13131'}}
 RUN_DIR = os.path.expanduser('~')  # os.path.dirname(os.path.realpath(__file__)) 
 
 # JOBS CONFIG
-TEST_PATH = os.environ.get('KINE_TEST_PATH', False)  ## Go through os.environ to allow setting from test scripts.
-# Use ~/.kine or the supplied TEST_PATH
-BASE_PATH = TEST_PATH or os.path.expanduser(os.path.join('~', '.kine'))
+TEST_PATH = os.environ.get('KINETIC_TEST_PATH', False)  ## Go through os.environ to allow setting from test scripts.
+# Use ~/.kinetic or the supplied TEST_PATH
+BASE_PATH = TEST_PATH or os.path.expanduser(os.path.join('~', '.kinetic'))
 os.makedirs(BASE_PATH, exist_ok=True)
 HOME_BIN = os.path.expanduser(os.path.join('~', 'bin'))
 os.makedirs(HOME_BIN, exist_ok=True)
@@ -30,7 +30,7 @@ LOG_DIR = os.path.join(BASE_PATH, 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # UPDATE CONFIG
-KINETIC_BINARY_URL_X64 = 'https://kinetic.icedb.info/x64/kine'
+KINETIC_BINARY_URL_X64 = 'https://kinetic.icedb.info/x64/kinetic'
 
 
 def config_files():

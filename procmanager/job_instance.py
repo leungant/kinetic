@@ -379,7 +379,7 @@ def run_job(jobname):
     args = [sys.executable]
     # module_name = sys.modules[__name__]
 
-    # If run via python env and library e.g. python -m procmanager insteads of kine
+    # If run via python env and library e.g. python -m procmanager insteads of kinetic
     if 'py' in str(sys.executable).lower():
         module_name = 'procmanager'
         args += ['-m', module_name]
@@ -392,7 +392,7 @@ def run_job(jobname):
     #TODO TRANSITIONS args.append('--prev-job-id')
     #TODO TRANSITIONS args.append(prev_job_id)
 
-    args.append(jobname)  # i.e. kine run JOBNAME
+    args.append(jobname)  # i.e. kinetic run JOBNAME
     # args = [sys.executable] + args
     # print(args)
     try:
